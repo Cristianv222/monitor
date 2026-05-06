@@ -1,0 +1,258 @@
+{% extends "base.html" %}
+
+{% block title %}Clientes y Facturación - Docker Monitor{% endblock %}
+{% block page_title %}Clientes y Facturación{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h3>Suscripciones de Clientes</h3>
+        <div style="display:flex; gap: 0.5rem;">
+            <button class="btn" style="background:var(--bg-surface-hover); color:white;" data-modal-target="newClientModal"><span class="material-icons-round">person_add</span> Nuevo Cliente</button>
+            <button class="btn btn-primary" data-modal-target="newSubModal"><span class="material-icons-round">add_card</span> Nueva Suscripción</button>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Cliente y RUC</th>
+                        <th>Plan y Precio</th>
+                        <th>Día de Corte</th>
+                        <th>Estado</th>
+                        <th>Contenedores</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for client in clients %}
+                        {% for sub in client.subscriptions.all %}
+                        <tr>
+                            <td>
+                                <div class="container-name-cell">
+                                    <div class="avatar" style="width: 32px; height: 32px; font-size: 0.9rem;">
+                                        {{ client.name|make_list|first|upper }}
+                                    </div>
+                                    <div class="user-details">
+                                        <span class="user-name">{{ client.name }}</span>
+                                        <span class="user-role">RUC: {{ client.cedula_ruc }}</span>
+                                    </div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="user-details">
+                                    <span class="user-name">{{ sub.plan_name }}</span>
+                                    <span class="text-success" style="font-weight: 600;">${{ sub.price }}/mes</span>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge badge-secondary">Día {{ sub.cutoff_day }}</span>
+                            </td>
+                            <td>
+                                {% if sub.status == 'active' %}
+                                    <span class="badge badge-success">Activo</span>
+                                {% elif sub.status == 'suspended' %}
+                                    <span class="badge badge-danger">Suspendido</span>
+                                {% elif sub.status == 'past_due' %}
+                                    <span class="badge badge-warning">Atrasado</span>
+                                {% else %}
+                                    <span class="badge badge-secondary">{{ sub.status|title }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="text-muted"><span class="material-icons-round" style="font-size: 1rem; vertical-align: middle;">dns</span> {{ sub.containers.count }} asig.</span>
+                            </td>
+                            <td>
+                                <a href="{% url 'subscription_metrics' sub.id %}" class="btn-icon small text-primary" title="Ver Recursos (RAM/CPU)"><span class="material-icons-round">bar_chart</span></a>
+                                <button class="btn-icon small text-primary" data-modal-target="assignContainerModal" onclick="showAssignContainer('{{ sub.id }}', '{{ client.name|escapejs }}')" title="Asignar Contenedores"><span class="material-icons-round">link</span></button>
+                                <button class="btn-icon small text-primary" data-modal-target="integrationModal" onclick="showIntegration('{{ client.name|escapejs }}', '{{ client.api_token }}')" title="Ver Credenciales API"><span class="material-icons-round">code</span></button>
+                                <button class="btn-icon small text-primary" title="Editar"><span class="material-icons-round">edit</span></button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">No se encontraron clientes ni suscripciones.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- New Client Modal -->
+<div class="modal-overlay" id="newClientModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Registrar Nuevo Cliente</h3>
+            <button class="btn-icon" data-modal-close type="button"><span class="material-icons-round">close</span></button>
+        </div>
+        <form method="POST" action="{% url 'create_client' %}">
+            {% csrf_token %}
+            <div class="modal-body" style="max-height: 60vh; overflow-y: auto;">
+                <div class="form-group">
+                    <label>Razón Social / Nombre Completo</label>
+                    <input type="text" name="name" class="form-control" required placeholder="Ej. Empresa SA">
+                </div>
+                <div class="form-group">
+                    <label>Cédula o RUC</label>
+                    <input type="text" name="cedula_ruc" class="form-control" required placeholder="Ej. 1700000000001">
+                </div>
+                <div class="form-group">
+                    <label>Correo Electrónico</label>
+                    <input type="email" name="email" class="form-control" required placeholder="contacto@empresa.com">
+                </div>
+                <div class="form-group">
+                    <label>Teléfono (Opcional)</label>
+                    <input type="text" name="phone" class="form-control" placeholder="+593 99 999 9999">
+                </div>
+                <div class="form-group">
+                    <label>Dirección Física (Opcional)</label>
+                    <input type="text" name="address" class="form-control" placeholder="Av. Principal y Secundaria">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" style="background:var(--bg-surface-hover); color:white;" data-modal-close>Cancelar</button>
+                <button type="submit" class="btn btn-primary">Guardar Cliente</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- New Subscription Modal -->
+<div class="modal-overlay" id="newSubModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Crear Suscripción</h3>
+            <button class="btn-icon" data-modal-close type="button"><span class="material-icons-round">close</span></button>
+        </div>
+        <form method="POST" action="{% url 'create_subscription' %}">
+            {% csrf_token %}
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Seleccionar Cliente</label>
+                    <select name="client_id" class="form-control" required>
+                        <option value="">-- Elija un Cliente --</option>
+                        {% for c in clients %}
+                        <option value="{{ c.id }}">{{ c.name }} ({{ c.cedula_ruc }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Nombre del Plan / Sistema</label>
+                    <input type="text" name="plan_name" class="form-control" required placeholder="Ej. Sistema de Inventario V2">
+                </div>
+                <div class="form-group">
+                    <label>Precio Mensual ($)</label>
+                    <input type="number" step="0.01" name="price" class="form-control" required placeholder="Ej. 49.99">
+                </div>
+                <div class="form-group">
+                    <label>Día de Corte Mensual</label>
+                    <input type="number" min="1" max="31" name="cutoff_day" class="form-control" required placeholder="Ej. 15">
+                    <small class="text-muted" style="display:block; margin-top:4px;">Día del mes en que se debe registrar el pago (1-31).</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" style="background:var(--bg-surface-hover); color:white;" data-modal-close>Cancelar</button>
+                <button type="submit" class="btn btn-primary">Crear Suscripción</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Assign Containers Modal -->
+<div class="modal-overlay" id="assignContainerModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Asignar Contenedores a: <span id="assignClientName" class="text-primary"></span></h3>
+            <button class="btn-icon" data-modal-close type="button"><span class="material-icons-round">close</span></button>
+        </div>
+        <form method="POST" action="{% url 'assign_containers' %}">
+            {% csrf_token %}
+            <input type="hidden" name="subscription_id" id="assignSubId">
+            <div class="modal-body" style="max-height: 50vh; overflow-y: auto;">
+                <p class="text-muted mb-3">Selecciona los contenedores de tu servidor que pertenecen a este sistema. Serán suspendidos automáticamente en caso de impago.</p>
+                
+                {% if unassigned_projects %}
+                    <div class="form-group">
+                        <label>Proyectos Disponibles (Stacks de Compose)</label>
+                        {% for project_name, containers in unassigned_projects.items %}
+                        <div style="background: var(--bg-surface-hover); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid var(--border-color);">
+                            <label class="custom-checkbox" style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+                                <input type="checkbox" name="project_names" value="{{ project_name }}">
+                                <span class="checkmark"></span>
+                                <span style="font-weight: 600; font-size: 1.1rem; color: var(--primary);">
+                                    {% if project_name == 'standalone' %}Contenedores Sueltos{% else %}Proyecto: {{ project_name|title }}{% endif %}
+                                </span>
+                            </label>
+                            <div style="margin-left: 2rem; border-left: 2px solid var(--border-color); padding-left: 1rem;">
+                                {% for container in containers %}
+                                    <div class="text-muted" style="margin-bottom: 0.2rem;"><span class="material-icons-round" style="font-size: 1rem; vertical-align: middle;">dns</span> {{ container.name }}</div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="empty-state" style="padding: 1.5rem;">
+                        <span class="material-icons-round text-warning" style="font-size: 2rem;">warning</span>
+                        <p class="text-center mt-2">No hay contenedores libres en el servidor. Todos están asignados o Docker no ha detectado nuevos.</p>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" style="background:var(--bg-surface-hover); color:white;" data-modal-close>Cancelar</button>
+                <button type="submit" class="btn btn-primary" {% if not unassigned_projects %}disabled{% endif %}>Vincular Proyecto Entero</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Integration Guide Modal -->
+<div class="modal-overlay" id="integrationModal">
+    <div class="modal" style="max-width: 650px;">
+        <div class="modal-header">
+            <h3>Credenciales API: <span id="intClientName"></span></h3>
+            <button class="btn-icon" data-modal-close type="button"><span class="material-icons-round">close</span></button>
+        </div>
+        <div class="modal-body">
+            <p class="text-muted" style="margin-bottom: 1rem;">Entrégale estas credenciales a los programadores del sistema de tu cliente. Con ellas podrán consultar periódicamente el estado de facturación para bloquear sus propias pantallas o mostrar avisos.</p>
+            
+            <div class="form-group">
+                <label>Paso 1: El Endpoint Oficial del Monitor</label>
+                <div style="background: #0f1115; border: 1px solid var(--border-color); padding: 0.75rem; border-radius: var(--radius-md); font-family: monospace; color: var(--primary);">
+                    GET http://localhost:8000/api/billing/status/
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>Paso 2: Token de Autorización (Autogenerado Seguro)</label>
+                <div style="background: #0f1115; border: 1px solid var(--border-color); padding: 0.75rem; border-radius: var(--radius-md); font-family: monospace; color: var(--warning); word-break: break-all;" id="intToken">
+                    --
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>Ejemplo de uso en cURL</label>
+                <div style="background: #0f1115; border: 1px solid var(--border-color); padding: 0.75rem; border-radius: var(--radius-md); font-family: monospace; font-size: 0.85rem; color: #e5e7eb; overflow-x: auto; white-space: pre;">curl -X GET http://localhost:8000/api/billing/status/ \
+  -H "Authorization: Bearer <span id="intCurlToken" style="color:var(--warning)"></span>"</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function showIntegration(name, token) {
+    document.getElementById('intClientName').innerText = name;
+    document.getElementById('intToken').innerText = token;
+    document.getElementById('intCurlToken').innerText = token;
+}
+
+function showAssignContainer(subId, clientName) {
+    document.getElementById('assignSubId').value = subId;
+    document.getElementById('assignClientName').innerText = clientName;
+}
+</script>
+{% endblock %}

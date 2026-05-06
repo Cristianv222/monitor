@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Docker Monitor{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-grid">
+    
+    <!-- Global Server Host Stats -->
+    <div class="card col-span-2" style="grid-column: span 4; margin-bottom: 1rem; border: 1px solid var(--primary);">
+        <div class="card-header" style="background: var(--primary-soft);">
+            <h3><span class="material-icons-round" style="vertical-align: middle; margin-right: 8px;">memory</span> Salud del Servidor Principal (VPS)</h3>
+            <span class="badge badge-success" id="wsStatus">Conectado (En Vivo)</span>
+        </div>
+        <div class="card-body" style="display: flex; gap: 2rem;">
+            <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span class="text-muted">CPU Global</span>
+                    <span id="hostCpuText" class="text-primary" style="font-weight: 600;">0%</span>
+                </div>
+                <div style="background: var(--bg-base); height: 12px; border-radius: 6px; overflow: hidden;">
+                    <div id="hostCpuBar" style="background: var(--primary); height: 100%; width: 0%; transition: width 0.5s;"></div>
+                </div>
+            </div>
+            <div style="flex: 1;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                    <span class="text-muted">RAM Global (<span id="hostRamText">0 MB / 0 MB</span>)</span>
+                    <span id="hostRamPercentText" class="text-warning" style="font-weight: 600;">0%</span>
+                </div>
+                <div style="background: var(--bg-base); height: 12px; border-radius: 6px; overflow: hidden;">
+                    <div id="hostRamBar" style="background: var(--warning); height: 100%; width: 0%; transition: width 0.5s;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Stats Cards -->
+    <div class="stat-card">
+        <div class="stat-icon bg-success-soft text-success">
+            <span class="material-icons-round">play_circle</span>
+        </div>
+        <div class="stat-details">
+            <span class="stat-label">En Ejecución</span>
+            <span class="stat-value">{{ running_containers|default:"0" }}</span>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon bg-success-soft text-success">
+            <span class="material-icons-round">verified_user</span>
+        </div>
+        <div class="stat-details">
+            <span class="stat-label">Suscrip. Activas</span>
+            <span class="stat-value">{{ active_subs|default:"0" }}</span>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon bg-danger-soft text-danger">
+            <span class="material-icons-round">block</span>
+        </div>
+        <div class="stat-details">
+            <span class="stat-label">Suspendidos</span>
+            <span class="stat-value">{{ suspended_subs|default:"0" }}</span>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon bg-warning-soft text-warning">
+            <span class="material-icons-round">stop_circle</span>
+        </div>
+        <div class="stat-details">
+            <span class="stat-label">Detenidos</span>
+            <span class="stat-value">{{ stopped_containers|default:"0" }}</span>
+        </div>
+    </div>
+
+    <div class="stat-card">
+        <div class="stat-icon bg-danger-soft text-danger">
+            <span class="material-icons-round">error_outline</span>
+        </div>
+        <div class="stat-details">
+            <span class="stat-label">Alertas Activas</span>
+            <span class="stat-value">{{ active_alerts|default:"0" }}</span>
+        </div>
+    </div>
+
+    <!-- Recent Containers Table -->
+    <div class="card col-span-2">
+        <div class="card-header">
+            <h3>Contenedores Recientes</h3>
+            <button class="btn-icon"><span class="material-icons-round">more_vert</span></button>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Nombre del Contenedor</th>
+                            <th>ID</th>
+                            <th>Estado</th>
+                            <th>Creado</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for container in recent_containers %}
+                        <tr>
+                            <td>
+                                <div class="container-name-cell">
+                                    <span class="material-icons-round container-icon">layers</span>
+                                    <span>{{ container.name }}</span>
+                                </div>
+                            </td>
+                            <td class="text-muted">{{ container.container_id|slice:":12" }}</td>
+                            <td>
+                                {% if container.status == 'running' %}
+                                    <span class="badge badge-success">Activo</span>
+                                {% elif container.status == 'exited' %}
+                                    <span class="badge badge-warning">Detenido</span>
+                                {% else %}
+                                    <span class="badge badge-secondary">{{ container.status|title }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-muted">hace {{ container.created_at|timesince }}</td>
+                            <td>
+                                <button class="btn-icon small text-primary"><span class="material-icons-round">visibility</span></button>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">No se encontraron contenedores.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Alerts List -->
+    <div class="card col-span-1">
+        <div class="card-header">
+            <h3>Alertas Recientes</h3>
+            <button class="btn-icon"><span class="material-icons-round">more_vert</span></button>
+        </div>
+        <div class="card-body p-0">
+            <div class="alert-list">
+                {% for alert in recent_alerts %}
+                <div class="alert-item">
+                    <div class="alert-icon text-{{ alert.severity }}">
+                        <span class="material-icons-round">
+                            {% if alert.severity == 'critical' %}warning
+                            {% elif alert.severity == 'warning' %}info
+                            {% else %}notifications{% endif %}
+                        </span>
+                    </div>
+                    <div class="alert-content">
+                        <p class="alert-message">{{ alert.message }}</p>
+                        <span class="alert-time">hace {{ alert.triggered_at|timesince }}</span>
+                    </div>
+                </div>
+                {% empty %}
+                <div class="empty-state">
+                    <span class="material-icons-round text-muted">check_circle_outline</span>
+                    <p class="text-muted mt-2">No hay alertas activas. Todo funciona correctamente.</p>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // WebSocket for Global Server Metrics
+    const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+    const serverSocket = new WebSocket(wsScheme + '://' + window.location.host + '/ws/server/');
+    
+    serverSocket.onopen = function(e) {
+        document.getElementById('wsStatus').innerText = "Conectado (En Vivo)";
+        document.getElementById('wsStatus').className = "badge badge-success";
+    };
+    
+    serverSocket.onmessage = function(e) {
+        const data = JSON.parse(e.data);
+        
+        // Update CPU
+        document.getElementById('hostCpuText').innerText = data.cpu_percent + '%';
+        document.getElementById('hostCpuBar').style.width = data.cpu_percent + '%';
+        if (data.cpu_percent > 85) {
+            document.getElementById('hostCpuBar').style.background = "var(--danger)";
+            document.getElementById('hostCpuText').className = "text-danger";
+        } else {
+            document.getElementById('hostCpuBar').style.background = "var(--primary)";
+            document.getElementById('hostCpuText').className = "text-primary";
+        }
+        
+        // Update RAM
+        document.getElementById('hostRamPercentText').innerText = data.ram_percent + '%';
+        document.getElementById('hostRamText').innerText = data.ram_used_mb + ' MB / ' + data.ram_total_mb + ' MB';
+        document.getElementById('hostRamBar').style.width = data.ram_percent + '%';
+        if (data.ram_percent > 85) {
+            document.getElementById('hostRamBar').style.background = "var(--danger)";
+            document.getElementById('hostRamPercentText').className = "text-danger";
+        } else {
+            document.getElementById('hostRamBar').style.background = "var(--warning)";
+            document.getElementById('hostRamPercentText').className = "text-warning";
+        }
+    };
+    
+    serverSocket.onclose = function(e) {
+        document.getElementById('wsStatus').innerText = "Desconectado";
+        document.getElementById('wsStatus').className = "badge badge-danger";
+    };
+</script>
+{% endblock %}

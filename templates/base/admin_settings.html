@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}Ajustes Admin - Docker Monitor{% endblock %}
+{% block page_title %}Centro de Control Administrativo{% endblock %}
+
+{% block content %}
+<div class="dashboard-grid">
+    <!-- Financial Overview -->
+    <div class="card" style="grid-column: span 2;">
+        <div class="card-header">
+            <h3><span class="material-icons-round" style="vertical-align: middle; margin-right: 8px;">account_balance_wallet</span> Resumen Financiero Mensual</h3>
+        </div>
+        <div class="card-body">
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;">
+                <div class="stat-card" style="box-shadow: none; background: var(--bg-surface-hover); border: 1px solid var(--border-color);">
+                    <div class="stat-details">
+                        <span class="stat-label">Ingresos Brutos</span>
+                        <span class="stat-value text-success">${{ total_income|floatformat:2 }}</span>
+                    </div>
+                </div>
+                <div class="stat-card" style="box-shadow: none; background: var(--bg-surface-hover); border: 1px solid var(--border-color);">
+                    <div class="stat-details">
+                        <span class="stat-label">Costo VPS</span>
+                        <span class="stat-value text-danger">${{ total_cost|floatformat:2 }}</span>
+                    </div>
+                </div>
+                <div class="stat-card" style="box-shadow: none; background: var(--bg-surface-hover); border: 1px solid var(--border-color);">
+                    <div class="stat-details">
+                        <span class="stat-label">Margen Neto</span>
+                        <span class="stat-value text-primary" style="color: var(--primary);">${{ profit_margin|floatformat:2 }}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VPS Cost Configuration -->
+    <div class="card">
+        <div class="card-header">
+            <h3><span class="material-icons-round" style="vertical-align: middle; margin-right: 8px;">settings_input_component</span> Configurar Costo VPS</h3>
+        </div>
+        <div class="card-body">
+            <form method="POST">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label>Precio Mensual de tu VPS ($)</label>
+                    <input type="number" step="0.01" name="vps_monthly_cost" class="form-control" value="{{ settings.vps_monthly_cost }}" required>
+                    <small class="text-muted">Este valor se usa para calcular tu rentabilidad real.</small>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1.5rem;">Actualizar Costo</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Profitability Analysis Table -->
+    <div class="card" style="grid-column: span 3;">
+        <div class="card-header">
+            <h3><span class="material-icons-round" style="vertical-align: middle; margin-right: 8px;">insights</span> Análisis de Rentabilidad por Sistema</h3>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table" style="margin: 0;">
+                    <thead>
+                        <tr>
+                            <th>Cliente / Sistema</th>
+                            <th>Uso RAM</th>
+                            <th>Uso CPU</th>
+                            <th>Precio Cobrado</th>
+                            <th>Precio Sugerido</th>
+                            <th>Eficiencia ($/MB)</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in sub_analysis %}
+                        <tr>
+                            <td>
+                                <strong>{{ item.subscription.client.name }}</strong><br>
+                                <small class="text-muted">{{ item.subscription.plan_name }}</small>
+                            </td>
+                            <td>{{ item.ram_usage }} MB</td>
+                            <td>{{ item.cpu_usage }}%</td>
+                            <td style="font-weight: 600; color: var(--text-primary);">${{ item.subscription.price }}</td>
+                            <td class="text-primary" style="font-weight: 600; color: var(--primary);">${{ item.suggested_price }}</td>
+                            <td class="text-muted">{{ item.efficiency }}</td>
+                            <td>
+                                {% if item.subscription.price >= item.suggested_price %}
+                                    <span class="badge badge-success">Rentable</span>
+                                {% else %}
+                                    <span class="badge badge-danger">Revisar Precio</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted py-4">No hay suscripciones activas para analizar.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

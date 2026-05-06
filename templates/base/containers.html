@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}Contenedores Globales - Docker Monitor{% endblock %}
+{% block page_title %}Gestión de Contenedores{% endblock %}
+
+{% block content %}
+<style>
+.client-group { margin-bottom: 1.5rem; background: var(--bg-surface); border-radius: 8px; border: 1px solid var(--border-color); overflow: hidden; }
+.client-group summary { 
+    background: var(--bg-surface-hover); 
+    padding: 1rem 1.5rem; 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    cursor: pointer; 
+    list-style: none; /* Hide default arrow */
+    border-bottom: 1px solid transparent;
+}
+.client-group summary::-webkit-details-marker { display: none; }
+.client-group details[open] summary { border-bottom: 1px solid var(--border-color); }
+.client-group summary:hover { opacity: 0.9; }
+
+/* Terminal styling */
+#logsTerminal {
+    background: #000; color: #0f0; font-family: 'Courier New', Courier, monospace;
+    height: 400px; overflow-y: auto; padding: 1rem; border-radius: 6px; font-size: 0.9rem;
+    white-space: pre-wrap; word-wrap: break-word; line-height: 1.4;
+}
+</style>
+
+<!-- Assigned Containers by Client -->
+<h2 style="margin-bottom: 1rem; color: var(--text-primary); font-size: 1.25rem;">Contenedores Asignados (Por Cliente)</h2>
+
+{% for client in clients %}
+    {% if client.subscriptions.count > 0 %}
+    <div class="client-group">
+        <!-- Cerrado por defecto como solicitó el usuario -->
+        <details>
+            <summary>
+                <div style="display:flex; align-items:center; gap: 1rem;">
+                    <span class="material-icons-round text-primary toggle-icon">expand_more</span>
+                    <div class="avatar" style="width: 40px; height: 40px; font-size: 1.2rem; background: var(--primary);">
+                        {{ client.name|make_list|first|upper }}
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.1rem;">{{ client.name }}</h3>
+                        <p class="text-muted" style="margin: 0; font-size: 0.85rem;">RUC: {{ client.cedula_ruc }}</p>
+                    </div>
+                </div>
+                <div onclick="event.stopPropagation()">
+                    <!-- Evitamos que hacer clic en el botón abra/cierre el acordeón -->
+                    {% with sub=client.subscriptions.first %}
+                    <a href="{% url 'subscription_metrics' sub.id %}" class="btn btn-primary" style="padding: 0.4rem 1rem;"><span class="material-icons-round" style="font-size: 1.2rem;">bar_chart</span> Ver Recursos</a>
+                    {% endwith %}
+                </div>
+            </summary>
+            
+            <div class="table-responsive">
+                <table class="table" style="margin: 0;">
+                    <thead>
+                        <tr>
+                            <th>Contenedor</th>
+                            <th>Proyecto</th>
+                            <th>Estado</th>
+                            <th>Suscripción</th>
+                            <th style="text-align: right;">Acciones de Control</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sub in client.subscriptions.all %}
+                            {% for container in sub.containers.all %}
+                            <tr>
+                                <td>
+                                    <span class="material-icons-round container-icon" style="vertical-align: middle; margin-right: 4px;">layers</span>
+                                    <strong>{{ container.name }}</strong> <small class="text-muted">({{ container.container_id|slice:":8" }})</small>
+                                </td>
+                                <td><span class="text-primary">{{ container.project_name|default:'standalone'|title }}</span></td>
+                                <td>
+                                    {% if container.status == 'running' %}
+                                        <span class="badge badge-success">Activo</span>
+                                    {% elif container.status == 'exited' %}
+                                        <span class="badge badge-danger">Detenido</span>
+                                    {% else %}
+                                        <span class="badge badge-warning">{{ container.status|title }}</span>
+                                    {% endif %}
+                                </td>
+                                <td><span class="text-muted">{{ sub.plan_name }}</span></td>
+                                <td style="text-align: right;">
+                                    <button type="button" class="btn-icon small text-primary" onclick="openLogs('{{ container.container_id }}', '{{ container.name }}')" title="Ver Logs"><span class="material-icons-round">terminal</span></button>
+                                    <form method="POST" action="{% url 'container_action' %}" style="display: inline-block;">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="container_id" value="{{ container.container_id }}">
+                                        
+                                        {% if container.status == 'running' %}
+                                            <button type="submit" name="action" value="restart" class="btn-icon small text-warning" title="Reiniciar"><span class="material-icons-round">restart_alt</span></button>
+                                            <button type="submit" name="action" value="stop" class="btn-icon small text-danger" title="Apagar"><span class="material-icons-round">stop</span></button>
+                                        {% else %}
+                                            <button type="submit" name="action" value="start" class="btn-icon small text-success" title="Encender"><span class="material-icons-round">play_arrow</span></button>
+                                        {% endif %}
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </details>
+    </div>
+    {% endif %}
+{% empty %}
+    <p class="text-muted mb-4">No hay clientes con contenedores asignados.</p>
+{% endfor %}
+
+<!-- Unassigned Containers -->
+<h2 style="margin-bottom: 1rem; color: var(--text-primary); font-size: 1.25rem;">Servidor: Contenedores Libres (No Asignados)</h2>
+<div class="card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table" style="margin: 0;">
+                <thead>
+                    <tr>
+                        <th>Proyecto (Stack)</th>
+                        <th>Nombre del Contenedor</th>
+                        <th>Estado</th>
+                        <th>Detectado</th>
+                        <th style="text-align: right;">Acciones de Control</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for project_name, containers in unassigned_projects.items %}
+                        {% for container in containers %}
+                        <tr>
+                            {% if forloop.first %}
+                            <td rowspan="{{ containers|length }}" style="vertical-align: middle; border-right: 1px solid var(--border-color);">
+                                <strong style="color: var(--primary);">{{ project_name|title }}</strong>
+                                <br><small class="text-muted">{{ containers|length }} contenedores</small>
+                            </td>
+                            {% endif %}
+                            <td>
+                                <span class="material-icons-round container-icon text-muted" style="vertical-align: middle; margin-right: 4px;">layers_clear</span>
+                                <strong>{{ container.name }}</strong> <small class="text-muted">({{ container.container_id|slice:":8" }})</small>
+                            </td>
+                            <td>
+                                {% if container.status == 'running' %}
+                                    <span class="badge badge-success">Activo</span>
+                                {% elif container.status == 'exited' %}
+                                    <span class="badge badge-danger">Detenido</span>
+                                {% else %}
+                                    <span class="badge badge-warning">{{ container.status|title }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-muted">hace {{ container.created_at|timesince }}</td>
+                            <td style="text-align: right;">
+                                <button type="button" class="btn-icon small text-primary" onclick="openLogs('{{ container.container_id }}', '{{ container.name }}')" title="Ver Logs"><span class="material-icons-round">terminal</span></button>
+                                <form method="POST" action="{% url 'container_action' %}" style="display: inline-block;">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="container_id" value="{{ container.container_id }}">
+                                    
+                                    {% if container.status == 'running' %}
+                                        <button type="submit" name="action" value="restart" class="btn-icon small text-warning" title="Reiniciar"><span class="material-icons-round">restart_alt</span></button>
+                                        <button type="submit" name="action" value="stop" class="btn-icon small text-danger" title="Apagar"><span class="material-icons-round">stop</span></button>
+                                    {% else %}
+                                        <button type="submit" name="action" value="start" class="btn-icon small text-success" title="Encender"><span class="material-icons-round">play_arrow</span></button>
+                                    {% endif %}
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">No hay contenedores libres en el servidor.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Logs Modal -->
+<div class="modal-overlay" id="logsModal">
+    <div class="modal" style="max-width: 800px;">
+        <div class="modal-header">
+            <h3>Terminal de Logs: <span id="logsContainerName" class="text-primary"></span></h3>
+            <span class="badge badge-warning" id="logsStatus">Conectando...</span>
+            <button class="btn-icon" onclick="closeLogs()" type="button"><span class="material-icons-round">close</span></button>
+        </div>
+        <div class="modal-body">
+            <div id="logsTerminal"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let logsSocket = null;
+
+    function openLogs(containerId, containerName) {
+        document.getElementById('logsContainerName').innerText = containerName;
+        document.getElementById('logsTerminal').innerHTML = '';
+        document.getElementById('logsStatus').innerText = 'Conectando...';
+        document.getElementById('logsStatus').className = 'badge badge-warning';
+        
+        // BUG FIX: styles.css usa 'show' para mostrar los modales
+        document.getElementById('logsModal').classList.add('show');
+
+        // Connect WebSocket
+        const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+        logsSocket = new WebSocket(wsScheme + '://' + window.location.host + '/ws/logs/' + containerId + '/');
+
+        logsSocket.onopen = function(e) {
+            document.getElementById('logsStatus').innerText = 'En Vivo';
+            document.getElementById('logsStatus').className = 'badge badge-success';
+        };
+
+        logsSocket.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            const term = document.getElementById('logsTerminal');
+            if(data.error) {
+                term.innerHTML += '<span style="color:red;">' + data.error + '</span>\n';
+            } else {
+                term.innerHTML += data.message;
+            }
+            term.scrollTop = term.scrollHeight; // Auto-scroll
+        };
+
+        logsSocket.onclose = function(e) {
+            document.getElementById('logsStatus').innerText = 'Desconectado';
+            document.getElementById('logsStatus').className = 'badge badge-danger';
+        };
+    }
+
+    function closeLogs() {
+        if (logsSocket) {
+            logsSocket.close();
+            logsSocket = null;
+        }
+        // BUG FIX: usar 'show' en lugar de 'active'
+        document.getElementById('logsModal').classList.remove('show');
+    }
+</script>
+
+{% endblock %}

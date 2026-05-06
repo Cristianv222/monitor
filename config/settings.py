@@ -1,4 +1,4 @@
-﻿import os
+import os
 from pathlib import Path
 import environ
 
@@ -28,6 +28,7 @@ INSTALLED_APPS = [
     'apps.monitoring',
     'apps.alerts',
     'apps.reports',
+    'apps.billing',
 ]
 
 MIDDLEWARE = [

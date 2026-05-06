@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+
+{% block title %}Métricas: {{ client.name }} - Docker Monitor{% endblock %}
+{% block page_title %}Recursos del Sistema: {{ client.name }}{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 1rem;">
+    <a href="{% url 'clients_list' %}" class="btn" style="background: var(--bg-surface-hover); color: var(--text-primary);"><span class="material-icons-round">arrow_back</span> Volver a Clientes</a>
+</div>
+
+<div class="card" style="margin-bottom: 2rem;">
+    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h3 style="margin:0;">{{ subscription.plan_name }}</h3>
+            <p class="text-muted" style="margin: 4px 0 0 0;">{{ containers.count }} Contenedores Vinculados</p>
+        </div>
+        <span class="badge badge-success" id="wsStatus">Conectado (En Vivo)</span>
+    </div>
+    
+    <div class="card-body">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+            <!-- RAM Chart -->
+            <div style="background: var(--bg-base); padding: 1rem; border-radius: 8px;">
+                <h4 style="margin-top:0; color: var(--warning);"><span class="material-icons-round" style="vertical-align:middle;">memory</span> Consumo de Memoria (RAM)</h4>
+                <div style="position: relative; height: 300px;">
+                    <canvas id="ramChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- CPU Chart -->
+            <div style="background: var(--bg-base); padding: 1rem; border-radius: 8px;">
+                <h4 style="margin-top:0; color: var(--primary);"><span class="material-icons-round" style="vertical-align:middle;">speed</span> Procesamiento (CPU)</h4>
+                <div style="position: relative; height: 300px;">
+                    <canvas id="cpuChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    const maxDataPoints = 30; // Mostrar los ultimos 30 puntos (aprox 2.5 min a 5 seg por punto)
+    
+    // Configuración global de Chart.js para modo oscuro
+    Chart.defaults.color = '#9ca3af';
+    Chart.defaults.borderColor = '#374151';
+
+    // Config RAM Chart
+    const ctxRam = document.getElementById('ramChart').getContext('2d');
+    const ramChart = new Chart(ctxRam, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: []
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, title: { display: true, text: 'Megabytes (MB)', color: '#9ca3af' } },
+                x: { display: false } // Ocultar labels de tiempo para que se vea mas limpio
+            },
+            animation: false, // Desactivar para que el update en vivo se vea suave
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+
+    // Config CPU Chart
+    const ctxCpu = document.getElementById('cpuChart').getContext('2d');
+    const cpuChart = new Chart(ctxCpu, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: []
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: { beginAtZero: true, max: 100, title: { display: true, text: 'Porcentaje (%)', color: '#9ca3af' } },
+                x: { display: false }
+            },
+            animation: false,
+            plugins: {
+                legend: { position: 'bottom' }
+            }
+        }
+    });
+
+    // Colores para los contenedores
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6'];
+    const containerColors = {};
+    let colorIndex = 0;
+
+    // Conectar WebSocket
+    const subId = "{{ subscription.id }}";
+    const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+    const metricSocket = new WebSocket(wsScheme + '://' + window.location.host + '/ws/metrics/' + subId + '/');
+
+    metricSocket.onopen = function(e) {
+        document.getElementById('wsStatus').innerText = "Conectado (En Vivo)";
+        document.getElementById('wsStatus').className = "badge badge-success";
+    };
+
+    metricSocket.onmessage = function(e) {
+        const containersData = JSON.parse(e.data); // Array de métricas de los contenedores
+        
+        const now = new Date().toLocaleTimeString();
+        ramChart.data.labels.push(now);
+        cpuChart.data.labels.push(now);
+        
+        if (ramChart.data.labels.length > maxDataPoints) {
+            ramChart.data.labels.shift();
+            cpuChart.data.labels.shift();
+        }
+
+        containersData.forEach(c => {
+            if (!containerColors[c.container_name]) {
+                containerColors[c.container_name] = colors[colorIndex % colors.length];
+                colorIndex++;
+                
+                // Add Dataset to RAM
+                ramChart.data.datasets.push({
+                    label: c.container_name,
+                    data: [],
+                    borderColor: containerColors[c.container_name],
+                    backgroundColor: containerColors[c.container_name] + '33', // Transparencia
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0
+                });
+                // Add Dataset to CPU
+                cpuChart.data.datasets.push({
+                    label: c.container_name,
+                    data: [],
+                    borderColor: containerColors[c.container_name],
+                    backgroundColor: containerColors[c.container_name] + '33', // Transparencia
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0
+                });
+            }
+
+            // Update RAM Data
+            const ramDataset = ramChart.data.datasets.find(ds => ds.label === c.container_name);
+            ramDataset.data.push(c.ram_mb);
+            if (ramDataset.data.length > maxDataPoints) ramDataset.data.shift();
+
+            // Update CPU Data
+            const cpuDataset = cpuChart.data.datasets.find(ds => ds.label === c.container_name);
+            cpuDataset.data.push(c.cpu_percent);
+            if (cpuDataset.data.length > maxDataPoints) cpuDataset.data.shift();
+        });
+
+        ramChart.update();
+        cpuChart.update();
+    };
+
+    metricSocket.onclose = function(e) {
+        document.getElementById('wsStatus').innerText = "Desconectado";
+        document.getElementById('wsStatus').className = "badge badge-danger";
+    };
+</script>
+{% endblock %}
