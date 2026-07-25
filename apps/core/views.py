@@ -11,6 +11,8 @@ import docker
 
 @login_required
 def dashboard(request):
+    from django.conf import settings
+    print(f"DEBUG: LOGIN_URL is {settings.LOGIN_URL}")
     total_containers = Container.objects.count()
     running_containers = Container.objects.filter(status='running').count()
     stopped_containers = Container.objects.filter(status='exited').count()
@@ -134,6 +136,21 @@ def assign_containers(request):
     return redirect('clients_list')
 
 @login_required
+@require_POST
+def unlink_container(request):
+    container_id = request.POST.get('container_id')
+    if container_id:
+        try:
+            container = Container.objects.get(container_id=container_id)
+            client_name = container.subscription.client.name if container.subscription else "cliente"
+            container.subscription = None
+            container.save()
+            messages.success(request, f'Contenedor desvinculado de {client_name}.')
+        except Container.DoesNotExist:
+            messages.error(request, 'Contenedor no encontrado.')
+    return redirect('containers_list')
+
+@login_required
 def subscription_metrics(request, sub_id):
     sub = get_object_or_404(Subscription, id=sub_id)
     # Get last 50 metrics for initial chart load (historical data)
@@ -228,11 +245,14 @@ def admin_settings(request):
     
     if request.method == 'POST':
         cost = request.POST.get('vps_monthly_cost')
+        ram_total = request.POST.get('total_server_ram_gb')
         if cost:
             settings.vps_monthly_cost = cost
-            settings.save()
-            messages.success(request, 'ConfiguraciÃ³n actualizada correctamente.')
-            return redirect('admin_settings')
+        if ram_total:
+            settings.total_server_ram_gb = ram_total
+        settings.save()
+        messages.success(request, 'Configuración actualizada correctamente.')
+        return redirect('admin_settings')
 
     # Financial Stats
     active_subscriptions = Subscription.objects.filter(status='active')
@@ -242,31 +262,51 @@ def admin_settings(request):
     
     # Resource Analysis per Subscription
     sub_analysis = []
+    
+    # Cost per MB of server RAM
+    server_total_mb = float(settings.total_server_ram_gb) * 1024
+    cost_per_mb = float(total_cost) / server_total_mb if server_total_mb > 0 else 0
+    
     for sub in active_subscriptions:
-        # Get metrics for all containers in this subscription
         containers = sub.containers.all()
-        # Sum of last metrics for each container
         total_ram = 0
         total_cpu = 0
+        total_estimated_cost = 0
+        
         for container in containers:
-            last_metric = container.metrics.first()
-            if last_metric:
-                total_ram += last_metric.ram_mb
-                total_cpu += last_metric.cpu_percent
+            # Try to get monthly average first, then hourly, then latest
+            monthly = container.monthly_metrics.first()
+            if monthly:
+                ram = monthly.avg_ram_mb
+                cpu = monthly.avg_cpu_percent
+            else:
+                hourly = container.hourly_metrics.all()[:24].aggregate(Avg('avg_ram_mb'), Avg('avg_cpu_percent'))
+                ram = hourly['avg_ram_mb__avg'] or 0
+                cpu = hourly['avg_cpu_percent__avg'] or 0
+                
+            if ram == 0: # Fallback to latest
+                last_metric = container.metrics.first()
+                if last_metric:
+                    ram = last_metric.ram_mb
+                    cpu = last_metric.cpu_percent
+            
+            total_ram += ram
+            total_cpu += cpu
+            total_estimated_cost += ram * cost_per_mb
         
         # Efficiency Score: Price / RAM (USD per MB)
-        # Avoid division by zero
         efficiency = float(sub.price) / (total_ram + 1) 
         
-        # Simple suggested price: $10 per 512MB RAM + base $15
-        suggested = (total_ram / 512) * 15 + 15
+        # Recommended price based on resource consumption (cost * 2 for margin)
+        recommended = total_estimated_cost * 2 + 5 # Base margin
         
         sub_analysis.append({
             'subscription': sub,
             'ram_usage': round(total_ram, 1),
             'cpu_usage': round(total_cpu, 1),
+            'estimated_cost': round(total_estimated_cost, 2),
             'efficiency': round(efficiency, 3),
-            'suggested_price': round(suggested, 2)
+            'recommended_price': round(recommended, 2)
         })
 
     context = {
@@ -274,6 +314,7 @@ def admin_settings(request):
         'total_income': total_income,
         'total_cost': total_cost,
         'profit_margin': profit_margin,
-        'sub_analysis': sub_analysis
+        'sub_analysis': sub_analysis,
+        'cost_per_mb': cost_per_mb
     }
     return render(request, 'base/admin_settings.html', context)

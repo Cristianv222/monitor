@@ -40,6 +40,7 @@ class Subscription(models.Model):
 
 class SystemSettings(models.Model):
     vps_monthly_cost = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, verbose_name="Costo Mensual del VPS ($)")
+    total_server_ram_gb = models.FloatField(default=1.0, verbose_name="Memoria RAM Total del VPS (GB)")
     
     class Meta:
         verbose_name = "ConfiguraciÃ³n del Sistema"

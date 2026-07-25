@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Reporte de Consumo - Docker Monitor{% endblock %}
+{% block page_title %}Reporte de Consumo Mensual{% endblock %}
+
+{% block content %}
+<div class="dashboard-grid">
+    {% for data in report_data %}
+    <div class="card" style="grid-column: span 3;">
+        <div class="card-header">
+            <h3><span class="material-icons-round" style="vertical-align: middle; margin-right: 8px;">analytics</span> {{ data.container.name }}</h3>
+            <span class="badge badge-info">{{ data.container.project_name }}</span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Mes</th>
+                            <th>CPU Promedio</th>
+                            <th>RAM Promedio</th>
+                            <th>Total GB-Horas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for month in data.months %}
+                        <tr>
+                            <td>{{ month.timestamp|date:"F Y" }}</td>
+                            <td>{{ month.avg_cpu_percent }}%</td>
+                            <td>{{ month.avg_ram_mb }} MB</td>
+                            <td class="text-primary" style="font-weight: 600;">{{ month.total_gb_hours }} GB-h</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="card" style="grid-column: span 3;">
+        <div class="card-body text-center py-5">
+            <span class="material-icons-round" style="font-size: 4rem; color: var(--text-muted);">history</span>
+            <p class="text-muted mt-3">No hay datos históricos suficientes para generar el reporte aún.</p>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

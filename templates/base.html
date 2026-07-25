@@ -48,6 +48,10 @@
                         <span class="material-icons-round">settings</span>
                         <span>Ajustes Admin</span>
                     </a>
+                    <a href="{% url 'reports:consumption_report' %}" class="nav-item {% if request.resolver_match.url_name == 'consumption_report' %}active{% endif %}">
+                        <span class="material-icons-round">analytics</span>
+                        <span>Reporte de Consumo</span>
+                    </a>
                 </nav>
                 
                 <div class="sidebar-footer">

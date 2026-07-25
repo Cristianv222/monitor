@@ -13,12 +13,15 @@
     justify-content: space-between; 
     align-items: center; 
     cursor: pointer; 
-    list-style: none; /* Hide default arrow */
+    list-style: none; 
     border-bottom: 1px solid transparent;
 }
 .client-group summary::-webkit-details-marker { display: none; }
 .client-group details[open] summary { border-bottom: 1px solid var(--border-color); }
 .client-group summary:hover { opacity: 0.9; }
+
+.toggle-icon { transition: transform 0.3s; }
+details[open] > summary .toggle-icon { transform: rotate(180deg); }
 
 /* Terminal styling */
 #logsTerminal {
@@ -29,12 +32,11 @@
 </style>
 
 <!-- Assigned Containers by Client -->
-<h2 style="margin-bottom: 1rem; color: var(--text-primary); font-size: 1.25rem;">Contenedores Asignados (Por Cliente)</h2>
+<h2 style="margin-bottom: 1rem; color: var(--text-primary); font-size: 1.25rem;"><span class="material-icons-round" style="vertical-align: middle; margin-right: 8px;">assignment_ind</span> Contenedores Asignados (Por Cliente)</h2>
 
 {% for client in clients %}
     {% if client.subscriptions.count > 0 %}
     <div class="client-group">
-        <!-- Cerrado por defecto como solicitó el usuario -->
         <details>
             <summary>
                 <div style="display:flex; align-items:center; gap: 1rem;">
@@ -48,7 +50,6 @@
                     </div>
                 </div>
                 <div onclick="event.stopPropagation()">
-                    <!-- Evitamos que hacer clic en el botón abra/cierre el acordeón -->
                     {% with sub=client.subscriptions.first %}
                     <a href="{% url 'subscription_metrics' sub.id %}" class="btn btn-primary" style="padding: 0.4rem 1rem;"><span class="material-icons-round" style="font-size: 1.2rem;">bar_chart</span> Ver Recursos</a>
                     {% endwith %}
@@ -87,6 +88,13 @@
                                 <td><span class="text-muted">{{ sub.plan_name }}</span></td>
                                 <td style="text-align: right;">
                                     <button type="button" class="btn-icon small text-primary" onclick="openLogs('{{ container.container_id }}', '{{ container.name }}')" title="Ver Logs"><span class="material-icons-round">terminal</span></button>
+                                    
+                                    <form method="POST" action="{% url 'unlink_container' %}" style="display: inline-block;" onsubmit="return confirm('¿Seguro que quieres desvincular este contenedor del cliente?')">
+                                        {% csrf_token %}
+                                        <input type="hidden" name="container_id" value="{{ container.container_id }}">
+                                        <button type="submit" class="btn-icon small text-muted" title="Desvincular del Cliente"><span class="material-icons-round">link_off</span></button>
+                                    </form>
+
                                     <form method="POST" action="{% url 'container_action' %}" style="display: inline-block;">
                                         {% csrf_token %}
                                         <input type="hidden" name="container_id" value="{{ container.container_id }}">
@@ -112,70 +120,90 @@
     <p class="text-muted mb-4">No hay clientes con contenedores asignados.</p>
 {% endfor %}
 
-<!-- Unassigned Containers -->
-<h2 style="margin-bottom: 1rem; color: var(--text-primary); font-size: 1.25rem;">Servidor: Contenedores Libres (No Asignados)</h2>
-<div class="card">
-    <div class="card-body p-0">
-        <div class="table-responsive">
-            <table class="table" style="margin: 0;">
-                <thead>
-                    <tr>
-                        <th>Proyecto (Stack)</th>
-                        <th>Nombre del Contenedor</th>
-                        <th>Estado</th>
-                        <th>Detectado</th>
-                        <th style="text-align: right;">Acciones de Control</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for project_name, containers in unassigned_projects.items %}
-                        {% for container in containers %}
-                        <tr>
-                            {% if forloop.first %}
-                            <td rowspan="{{ containers|length }}" style="vertical-align: middle; border-right: 1px solid var(--border-color);">
-                                <strong style="color: var(--primary);">{{ project_name|title }}</strong>
-                                <br><small class="text-muted">{{ containers|length }} contenedores</small>
-                            </td>
-                            {% endif %}
-                            <td>
-                                <span class="material-icons-round container-icon text-muted" style="vertical-align: middle; margin-right: 4px;">layers_clear</span>
-                                <strong>{{ container.name }}</strong> <small class="text-muted">({{ container.container_id|slice:":8" }})</small>
-                            </td>
-                            <td>
-                                {% if container.status == 'running' %}
-                                    <span class="badge badge-success">Activo</span>
-                                {% elif container.status == 'exited' %}
-                                    <span class="badge badge-danger">Detenido</span>
-                                {% else %}
-                                    <span class="badge badge-warning">{{ container.status|title }}</span>
-                                {% endif %}
-                            </td>
-                            <td class="text-muted">hace {{ container.created_at|timesince }}</td>
-                            <td style="text-align: right;">
-                                <button type="button" class="btn-icon small text-primary" onclick="openLogs('{{ container.container_id }}', '{{ container.name }}')" title="Ver Logs"><span class="material-icons-round">terminal</span></button>
-                                <form method="POST" action="{% url 'container_action' %}" style="display: inline-block;">
-                                    {% csrf_token %}
-                                    <input type="hidden" name="container_id" value="{{ container.container_id }}">
-                                    
-                                    {% if container.status == 'running' %}
-                                        <button type="submit" name="action" value="restart" class="btn-icon small text-warning" title="Reiniciar"><span class="material-icons-round">restart_alt</span></button>
-                                        <button type="submit" name="action" value="stop" class="btn-icon small text-danger" title="Apagar"><span class="material-icons-round">stop</span></button>
-                                    {% else %}
-                                        <button type="submit" name="action" value="start" class="btn-icon small text-success" title="Encender"><span class="material-icons-round">play_arrow</span></button>
-                                    {% endif %}
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    {% empty %}
-                    <tr>
-                        <td colspan="5" class="text-center text-muted py-4">No hay contenedores libres en el servidor.</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+<hr style="border: 0; border-top: 1px solid var(--border-color); margin: 2rem 0;">
+
+<!-- Unassigned Containers Master Accordion -->
+<div class="client-group" style="border: 1px solid var(--warning); background: rgba(255, 193, 7, 0.02);">
+    <details>
+        <summary>
+            <div style="display:flex; align-items:center; gap: 1rem;">
+                <span class="material-icons-round text-warning toggle-icon">expand_more</span>
+                <span class="material-icons-round text-warning" style="font-size: 2rem;">dns</span>
+                <div>
+                    <h2 style="margin: 0; font-size: 1.25rem; color: var(--text-primary);">Servidor: Contenedores Libres (No Asignados)</h2>
+                    <p class="text-muted" style="margin: 0; font-size: 0.85rem;">Auditoría de sistemas detectados sin vinculación a clientes.</p>
+                </div>
+            </div>
+            <span class="badge badge-warning">Requiere Atención</span>
+        </summary>
+        
+        <div style="padding: 1.5rem;">
+            {% for project_name, containers in unassigned_projects.items %}
+            <div class="client-group" style="margin-bottom: 1rem; border-color: var(--border-color);">
+                <details>
+                    <summary style="background: var(--bg-surface);">
+                        <div style="display:flex; align-items:center; gap: 1rem;">
+                            <span class="material-icons-round text-muted toggle-icon">expand_more</span>
+                            <span class="material-icons-round text-muted">folder</span>
+                            <div>
+                                <h3 style="margin: 0; font-size: 1.05rem;">Proyecto: {{ project_name|title }}</h3>
+                                <p class="text-muted" style="margin: 0; font-size: 0.8rem;">{{ containers|length }} contenedor(es)</p>
+                            </div>
+                        </div>
+                    </summary>
+                    
+                    <div class="table-responsive">
+                        <table class="table" style="margin: 0;">
+                            <thead>
+                                <tr>
+                                    <th>Contenedor</th>
+                                    <th>Estado</th>
+                                    <th>Detectado</th>
+                                    <th style="text-align: right;">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for container in containers %}
+                                <tr>
+                                    <td>
+                                        <span class="material-icons-round container-icon text-muted" style="vertical-align: middle; margin-right: 4px;">layers_clear</span>
+                                        <strong>{{ container.name }}</strong>
+                                    </td>
+                                    <td>
+                                        {% if container.status == 'running' %}
+                                            <span class="badge badge-success">Activo</span>
+                                        {% elif container.status == 'exited' %}
+                                            <span class="badge badge-danger">Detenido</span>
+                                        {% else %}
+                                            <span class="badge badge-warning">{{ container.status|title }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-muted">hace {{ container.created_at|timesince }}</td>
+                                    <td style="text-align: right;">
+                                        <button type="button" class="btn-icon small text-primary" onclick="openLogs('{{ container.container_id }}', '{{ container.name }}')" title="Ver Logs"><span class="material-icons-round">terminal</span></button>
+                                        <form method="POST" action="{% url 'container_action' %}" style="display: inline-block;">
+                                            {% csrf_token %}
+                                            <input type="hidden" name="container_id" value="{{ container.container_id }}">
+                                            {% if container.status == 'running' %}
+                                                <button type="submit" name="action" value="restart" class="btn-icon small text-warning"><span class="material-icons-round">restart_alt</span></button>
+                                                <button type="submit" name="action" value="stop" class="btn-icon small text-danger"><span class="material-icons-round">stop</span></button>
+                                            {% else %}
+                                                <button type="submit" name="action" value="start" class="btn-icon small text-success"><span class="material-icons-round">play_arrow</span></button>
+                                            {% endif %}
+                                        </form>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </details>
+            </div>
+            {% empty %}
+            <p class="text-center text-muted">No hay contenedores libres.</p>
+            {% endfor %}
         </div>
-    </div>
+    </details>
 </div>
 
 <!-- Logs Modal -->
@@ -201,10 +229,8 @@
         document.getElementById('logsStatus').innerText = 'Conectando...';
         document.getElementById('logsStatus').className = 'badge badge-warning';
         
-        // BUG FIX: styles.css usa 'show' para mostrar los modales
         document.getElementById('logsModal').classList.add('show');
 
-        // Connect WebSocket
         const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
         logsSocket = new WebSocket(wsScheme + '://' + window.location.host + '/ws/logs/' + containerId + '/');
 
@@ -221,7 +247,7 @@
             } else {
                 term.innerHTML += data.message;
             }
-            term.scrollTop = term.scrollHeight; // Auto-scroll
+            term.scrollTop = term.scrollHeight;
         };
 
         logsSocket.onclose = function(e) {
@@ -235,7 +261,6 @@
             logsSocket.close();
             logsSocket = null;
         }
-        // BUG FIX: usar 'show' en lugar de 'active'
         document.getElementById('logsModal').classList.remove('show');
     }
 </script>

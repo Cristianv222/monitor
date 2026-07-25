@@ -35,3 +35,26 @@ class ContainerMetric(models.Model):
         indexes = [
             models.Index(fields=['container', '-timestamp']),
         ]
+
+class HourlyContainerMetric(models.Model):
+    container = models.ForeignKey(Container, on_delete=models.CASCADE, related_name='hourly_metrics')
+    avg_cpu_percent = models.FloatField()
+    avg_ram_mb = models.FloatField()
+    max_cpu_percent = models.FloatField()
+    max_ram_mb = models.FloatField()
+    timestamp = models.DateTimeField() # Start of the hour
+
+    class Meta:
+        ordering = ['-timestamp']
+        unique_together = ['container', 'timestamp']
+
+class MonthlyContainerMetric(models.Model):
+    container = models.ForeignKey(Container, on_delete=models.CASCADE, related_name='monthly_metrics')
+    avg_cpu_percent = models.FloatField()
+    avg_ram_mb = models.FloatField()
+    total_gb_hours = models.FloatField(help_text="Cumulative GB-Hours for the month")
+    timestamp = models.DateTimeField() # Start of the month
+
+    class Meta:
+        ordering = ['-timestamp']
+        unique_together = ['container', 'timestamp']

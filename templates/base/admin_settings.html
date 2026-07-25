@@ -34,10 +34,10 @@
         </div>
     </div>
 
-    <!-- VPS Cost Configuration -->
+    <!-- VPS Configuration -->
     <div class="card">
         <div class="card-header">
-            <h3><span class="material-icons-round" style="vertical-align: middle; margin-right: 8px;">settings_input_component</span> Configurar Costo VPS</h3>
+            <h3><span class="material-icons-round" style="vertical-align: middle; margin-right: 8px;">settings_input_component</span> Configurar VPS</h3>
         </div>
         <div class="card-body">
             <form method="POST">
@@ -45,9 +45,13 @@
                 <div class="form-group">
                     <label>Precio Mensual de tu VPS ($)</label>
                     <input type="number" step="0.01" name="vps_monthly_cost" class="form-control" value="{{ settings.vps_monthly_cost }}" required>
-                    <small class="text-muted">Este valor se usa para calcular tu rentabilidad real.</small>
                 </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1.5rem;">Actualizar Costo</button>
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label>Memoria RAM Total (GB)</label>
+                    <input type="number" step="0.1" name="total_server_ram_gb" class="form-control" value="{{ settings.total_server_ram_gb }}" required>
+                    <small class="text-muted">Utilizada para calcular el costo por recurso.</small>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 1.5rem;">Actualizar Configuración</button>
             </form>
         </div>
     </div>
@@ -55,7 +59,7 @@
     <!-- Profitability Analysis Table -->
     <div class="card" style="grid-column: span 3;">
         <div class="card-header">
-            <h3><span class="material-icons-round" style="vertical-align: middle; margin-right: 8px;">insights</span> Análisis de Rentabilidad por Sistema</h3>
+            <h3><span class="material-icons-round" style="vertical-align: middle; margin-right: 8px;">insights</span> Análisis de Rentabilidad Basado en Consumo Real</h3>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -63,11 +67,11 @@
                     <thead>
                         <tr>
                             <th>Cliente / Sistema</th>
-                            <th>Uso RAM</th>
-                            <th>Uso CPU</th>
+                            <th>Uso RAM (Prom)</th>
+                            <th>Uso CPU (Prom)</th>
+                            <th>Costo Estimado</th>
                             <th>Precio Cobrado</th>
-                            <th>Precio Sugerido</th>
-                            <th>Eficiencia ($/MB)</th>
+                            <th>Precio Recomendado</th>
                             <th>Estado</th>
                         </tr>
                     </thead>
@@ -80,14 +84,14 @@
                             </td>
                             <td>{{ item.ram_usage }} MB</td>
                             <td>{{ item.cpu_usage }}%</td>
+                            <td class="text-danger">-${{ item.estimated_cost }}</td>
                             <td style="font-weight: 600; color: var(--text-primary);">${{ item.subscription.price }}</td>
-                            <td class="text-primary" style="font-weight: 600; color: var(--primary);">${{ item.suggested_price }}</td>
-                            <td class="text-muted">{{ item.efficiency }}</td>
+                            <td class="text-primary" style="font-weight: 600; color: var(--primary);">${{ item.recommended_price }}</td>
                             <td>
-                                {% if item.subscription.price >= item.suggested_price %}
+                                {% if item.subscription.price >= item.estimated_cost %}
                                     <span class="badge badge-success">Rentable</span>
                                 {% else %}
-                                    <span class="badge badge-danger">Revisar Precio</span>
+                                    <span class="badge badge-danger">Pérdida</span>
                                 {% endif %}
                             </td>
                         </tr>

@@ -15,6 +15,7 @@ urlpatterns = [
     path('containers/', core_views.containers_list, name='containers_list'),
     path('containers/assign/', core_views.assign_containers, name='assign_containers'),
     path('containers/action/', core_views.container_action, name='container_action'),
+    path('containers/unlink/', core_views.unlink_container, name='unlink_container'),
     path('admin-panel/', core_views.admin_settings, name='admin_settings'),
     path('login/', core_views.user_login, name='login'),
     path('logout/', core_views.user_logout, name='logout'),
@@ -34,3 +35,6 @@ if settings.DEBUG:
 admin.site.site_header = f"{settings.SITE_NAME} - AdministraciÃ³n"
 admin.site.site_title = settings.SITE_NAME
 admin.site.index_title = "Panel de Control"
+
+from django.conf import settings
+print(f"DEBUG: Initializing URLs. LOGIN_URL is {settings.LOGIN_URL}")
